@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Identity -->
+    <key>Label</key>
+    <string>__LABEL_PREFIX__.watcher</string>
+
+    <!-- Launch the fswatch watcher script. -->
+    <key>ProgramArguments</key>
+    <array>
+        <string>__REPO_ROOT__/bin/watcher.sh</string>
+    </array>
+
+    <!-- Working directory: the user's workspace containing task-board.md. -->
+    <key>WorkingDirectory</key>
+    <string>__WORKSPACE_ROOT__</string>
+
+    <!-- Environment -->
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>__HOME__/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+        <key>HOME</key>
+        <string>__HOME__</string>
+        <key>WORKSPACE_ROOT</key>
+        <string>__WORKSPACE_ROOT__</string>
+        <key>TASK_ROUTER_BIN</key>
+        <string>__REPO_ROOT__/bin</string>
+    </dict>
+
+    <!-- Long-running; relaunch on crash. -->
+    <key>KeepAlive</key>
+    <true/>
+
+    <!-- Start on boot. -->
+    <key>RunAtLoad</key>
+    <true/>
+
+    <!-- Backoff between relaunches so we don't burn CPU on a crashloop. -->
+    <key>ThrottleInterval</key>
+    <integer>5</integer>
+
+    <!-- Log redirection. -->
+    <key>StandardOutPath</key>
+    <string>__WORKSPACE_ROOT__/.task-router/state/launchd-watcher.log</string>
+    <key>StandardErrorPath</key>
+    <string>__WORKSPACE_ROOT__/.task-router/state/launchd-watcher.log</string>
+</dict>
+</plist>

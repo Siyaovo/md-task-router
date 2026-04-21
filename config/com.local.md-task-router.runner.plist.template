@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Identity -->
+    <key>Label</key>
+    <string>__LABEL_PREFIX__.runner</string>
+
+    <!-- Hourly fallback: re-runs task-check once an hour in case fswatch missed an edit. -->
+    <key>StartInterval</key>
+    <integer>3600</integer>
+
+    <!-- Command to execute. -->
+    <key>ProgramArguments</key>
+    <array>
+        <string>__REPO_ROOT__/bin/run-task-check.sh</string>
+        <string>launchd-hourly</string>
+    </array>
+
+    <!-- Working directory: the user's workspace containing task-board.md. -->
+    <key>WorkingDirectory</key>
+    <string>__WORKSPACE_ROOT__</string>
+
+    <!-- Environment: PATH must include wherever `claude` and `fswatch` live. -->
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>__HOME__/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+        <key>HOME</key>
+        <string>__HOME__</string>
+        <key>WORKSPACE_ROOT</key>
+        <string>__WORKSPACE_ROOT__</string>
+        <key>TASK_ROUTER_BIN</key>
+        <string>__REPO_ROOT__/bin</string>
+    </dict>
+
+    <!-- Log redirection. -->
+    <key>StandardOutPath</key>
+    <string>__WORKSPACE_ROOT__/.task-router/state/launchd-runner.log</string>
+    <key>StandardErrorPath</key>
+    <string>__WORKSPACE_ROOT__/.task-router/state/launchd-runner.log</string>
+
+    <!-- Do not run on boot — only on schedule. -->
+    <key>RunAtLoad</key>
+    <false/>
+</dict>
+</plist>
