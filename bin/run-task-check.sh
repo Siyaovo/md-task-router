@@ -92,6 +92,7 @@ cd "$WORKSPACE_ROOT"
 # --- Invoke Claude Code running the /task-check skill ---
 # bash-native timeout: background the process + kill-timer.
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] === run-task-check start (trigger=$TRIGGER_SOURCE) ===" >> "$RUN_LOG"
+RUN_LOG_OFFSET=$(wc -l < "$RUN_LOG")
 
 claude \
   --permission-mode bypassPermissions \
@@ -124,6 +125,17 @@ if [ "$EXIT_CODE" -eq 0 ]; then
 elif [ "$EXIT_CODE" -eq 137 ] || [ "$EXIT_CODE" -eq 143 ]; then
   # 137 = SIGKILL, 143 = SIGTERM — both indicate our timeout killed it.
   log_event "timeout" "\"timeout_secs\":$TIMEOUT_SECS"
+elif tail -n +"$((RUN_LOG_OFFSET + 1))" "$RUN_LOG" \
+     | grep -q -E "Failed to authenticate|401 Invalid authentication"; then
+  # Expired credentials. Retrying is useless — a human has to re-authenticate.
+  # Emit a distinct event and a desktop notification, so this does not fail
+  # silently for weeks behind a generic `failed`.
+  log_event "auth_failed" "\"exit_code\":$EXIT_CODE"
+  if command -v osascript >/dev/null 2>&1; then
+    osascript -e 'display notification "Claude CLI credentials expired — run: claude auth login" with title "Task Router stalled"' 2>/dev/null || true
+  elif command -v notify-send >/dev/null 2>&1; then
+    notify-send "Task Router stalled" "Claude CLI credentials expired — run: claude auth login" 2>/dev/null || true
+  fi
 else
   log_event "failed" "\"exit_code\":$EXIT_CODE"
 fi

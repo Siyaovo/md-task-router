@@ -184,6 +184,22 @@ If something goes wrong, check `$WORKSPACE_ROOT/.task-router/state/launchd-watch
 and `launchd-runner.log` — they contain stdout/stderr from the launchd-managed
 processes.
 
+### Expired credentials
+
+A run whose `claude` invocation dies on expired credentials is logged as
+`auth_failed` rather than the generic `failed`, and raises a desktop
+notification:
+
+```json
+{"ts":"2026-09-15T05:48:23Z","event":"auth_failed","trigger":"launchd-hourly","exit_code":1}
+```
+
+This case is worth separating because retrying cannot fix it — a human has
+to run `claude auth login`. Folded into `failed`, an expired login looks
+exactly like a transient error, and a scheduled runner will keep firing
+hourly against it indefinitely. In my own deployment it did so for six
+weeks before I noticed.
+
 ---
 
 ## Design decisions
