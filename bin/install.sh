@@ -25,6 +25,22 @@ fi
 
 LABEL_PREFIX="${LABEL_PREFIX:-io.github.local.md-task-router}"
 
+# Background jobs run with a minimal PATH, so find claude and fswatch now.
+CLAUDE_BIN="$(command -v claude || true)"
+FSWATCH_BIN="$(command -v fswatch || true)"
+if [ -z "$CLAUDE_BIN" ]; then
+  echo "✗ claude not found on PATH. Install Claude Code first: https://docs.claude.com/en/docs/claude-code"
+  exit 1
+fi
+if [ -z "$FSWATCH_BIN" ]; then
+  echo "✗ fswatch not found on PATH. Install it with: brew install fswatch"
+  exit 1
+fi
+EXTRA_PATH="$(dirname "$CLAUDE_BIN"):$(dirname "$FSWATCH_BIN")"
+
+# Log directory must exist before launchd tries to write into it.
+mkdir -p "$WORKSPACE_ROOT/.task-router/state"
+
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CONFIG_DIR="$REPO_ROOT/config"
 LA_DIR="$HOME/Library/LaunchAgents"
@@ -47,6 +63,8 @@ echo ""
 echo "  WORKSPACE_ROOT = $WORKSPACE_ROOT"
 echo "  REPO_ROOT      = $REPO_ROOT"
 echo "  LABEL_PREFIX   = $LABEL_PREFIX"
+echo "  claude         = $CLAUDE_BIN"
+echo "  fswatch        = $FSWATCH_BIN"
 echo ""
 
 # 1. Render plist templates with real paths + LABEL_PREFIX.
@@ -59,9 +77,19 @@ for i in "${!LABELS[@]}"; do
     -e "s|__REPO_ROOT__|$REPO_ROOT|g" \
     -e "s|__HOME__|$HOME|g" \
     -e "s|__LABEL_PREFIX__|$LABEL_PREFIX|g" \
+    -e "s|<string>$HOME/.local/bin:|<string>$EXTRA_PATH:$HOME/.local/bin:|" \
     "$CONFIG_DIR/$template" > "$RENDERED_DIR/$label.plist"
   echo "  ✓ $label.plist"
 done
+
+# Remember the settings so status.sh / auto-off.sh / run-task-check.sh work
+# from any new terminal without exporting WORKSPACE_ROOT again.
+cat > "$RENDERED_DIR/env.sh" <<ENVEOF
+: "\${WORKSPACE_ROOT:=$WORKSPACE_ROOT}"
+: "\${LABEL_PREFIX:=$LABEL_PREFIX}"
+export WORKSPACE_ROOT LABEL_PREFIX
+ENVEOF
+echo "  ✓ settings saved to .rendered/env.sh"
 
 # 2. Unload existing versions (idempotent).
 for label in "${LABELS[@]}"; do

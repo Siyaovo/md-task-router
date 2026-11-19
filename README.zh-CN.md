@@ -10,6 +10,8 @@
 
 所有状态都是放在 git 目录里的纯文本。没有数据库，不绑定任何平台。
 
+**一句话说它能干什么：** 你在一个 Markdown 文件里写任务卡，把 `Who` 写成 Claude、`Status` 写成 `ready`，保存。后台的 Claude 会自己接手，做完把结果写回卡片，再把卡改成 `done`。你不用开终端，也不用守着。
+
 ---
 
 ## 为什么这样设计
@@ -60,8 +62,8 @@ Claude Code 执行 task-check skill
 
 - **macOS**，装好 Homebrew（Linux 见下文）
 - **`fswatch`**：`brew install fswatch`
-- **[Claude Code 命令行](https://docs.claude.com/en/docs/claude-code)**，并且在 `PATH` 里
-- 一个放着 `task-board.md` 的文件夹
+- **[Claude Code 命令行](https://docs.claude.com/en/docs/claude-code)**，已经在终端里用 `claude` 登录过（需要 Claude Pro 或 Max 订阅）
+- 一个文件夹，用来放 `task-board.md` 和 Claude 产出的文件（最好是 git 仓库，方便撤销）
 
 ---
 
@@ -76,8 +78,10 @@ cd ~/code/md-task-router
 brew install fswatch
 
 # 3. 让 WORKSPACE_ROOT 指向放 task-board.md 的文件夹
-#    还没有看板的话，把 sample/task-board.md 复制过去
 export WORKSPACE_ROOT=~/notes
+mkdir -p "$WORKSPACE_ROOT"
+#    还没有看板的话，复制示例看板过去（已经有了就跳过这一行）
+cp sample/task-board.md "$WORKSPACE_ROOT/"
 
 # 4.（可选）给 launchd 任务起自己的标签前缀
 #    默认是 io.github.local.md-task-router
@@ -99,7 +103,27 @@ bash bin/install.sh
 
 令牌只存在你的钥匙串里。`run-task-check.sh` 每次运行时去钥匙串里读，不用写进任何文件或环境变量。
 
-装好以后，改一下 `$WORKSPACE_ROOT/task-board.md` 并保存，几秒内 `events.jsonl` 里就会出现一条 `file_changed_triggered`。
+`install.sh` 会自动找到 `claude` 和 `fswatch` 装在哪里，并把 `WORKSPACE_ROOT` 记下来。之后打开新的终端，直接在仓库目录里运行 `bin/` 下的命令就行，不用再 export 一遍。
+
+如果这个文件夹是 git 仓库，建议在它的 `.gitignore` 里加一行 `.task-router/`，运行日志就不会混进你自己的提交。
+
+### 装好后先跑通一次
+
+1. 打开 `$WORKSPACE_ROOT/task-board.md`，在「To do」下面加一张测试卡：
+
+   ```markdown
+   ## [TASK-100] 测试一下
+   - **Who**: Claude
+   - **Est**: —
+   - **Type**: simple
+   - **Priority**: P1 · #test · @output
+   - **Status**: ready
+   - **Measure**: 在 hello.md 里写一句「任务路由跑通了」
+   ```
+
+2. 保存，然后等大约一分钟（要先等 30 秒没人改动，再加上 Claude 干活的时间）。
+3. 在仓库目录里运行 `bash bin/status.sh`。跑通的话，`hello.md` 已经生成，这张卡变成了 `done`，`events.jsonl` 最后一行是 `completed`。
+4. 没反应的话，先看 `$WORKSPACE_ROOT/.task-router/state/launchd-runner.log`，再看下文「事件与排查」。
 
 ---
 
@@ -139,6 +163,8 @@ bash bin/smoke-test.sh
 - **Status**: ready
 - **Measure**: 在 notes/2026-04-21-meeting.md 顶部写 3 条要点，并把待办单独列成编号清单
 ```
+
+只有 `Who` 里有 Claude、并且 `Status` 是 `ready` 的卡才会被自动执行；写给人的卡（比如 `Who: 我`）它只会跳过。
 
 保存。监听器发现变化，等文件静默 30 秒后运行器启动。Claude 读看板，找到这张 `ready` 的卡，派给一个子 Agent 去做，写回结果，再把卡改成 `done`。
 

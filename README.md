@@ -77,8 +77,8 @@ Claude Code running the task-check skill
 
 - **macOS** with Homebrew (Linux instructions below)
 - **`fswatch`** — `brew install fswatch`
-- **[Claude Code CLI](https://docs.claude.com/en/docs/claude-code)** on your `PATH`
-- A text workspace directory that contains a `task-board.md` file
+- **[Claude Code CLI](https://docs.claude.com/en/docs/claude-code)**, already logged in once with `claude` (Claude Pro or Max)
+- A workspace folder for `task-board.md` and whatever Claude produces (ideally a git repo, so runs can be undone)
 
 ---
 
@@ -93,8 +93,10 @@ cd ~/code/md-task-router
 brew install fswatch
 
 # 3. Point WORKSPACE_ROOT at the folder that contains your task-board.md.
-#    If you don't have one yet, copy sample/task-board.md into it.
 export WORKSPACE_ROOT=~/notes
+mkdir -p "$WORKSPACE_ROOT"
+#    No board yet? Copy the sample (skip this if you already have one).
+cp sample/task-board.md "$WORKSPACE_ROOT/"
 
 # 4. (Optional) Set your own reverse-DNS label prefix for the launchd
 #    agents. Default is io.github.local.md-task-router; override with
@@ -119,8 +121,32 @@ bash bin/install.sh
 The token lives only in your Keychain. `run-task-check.sh` reads it on every
 run; you never put it in a file or an environment variable.
 
-That's it. Edit `$WORKSPACE_ROOT/task-board.md`, save, and within a few
-seconds `events.jsonl` should show a `file_changed_triggered` event.
+`install.sh` finds where `claude` and `fswatch` live and remembers
+`WORKSPACE_ROOT`, so the `bin/` commands work from any new terminal without
+exporting it again.
+
+If the workspace is a git repo, add `.task-router/` to its `.gitignore` so run
+logs stay out of your own commits.
+
+### First run
+
+1. Add a test card under "To do" in `$WORKSPACE_ROOT/task-board.md`:
+
+   ```markdown
+   ## [TASK-100] Smoke test
+   - **Who**: Claude
+   - **Est**: —
+   - **Type**: simple
+   - **Priority**: P1 · #test · @output
+   - **Status**: ready
+   - **Measure**: hello.md contains the line "task router works"
+   ```
+
+2. Save, then wait about a minute (30 seconds of quiet, plus Claude's work).
+3. Run `bash bin/status.sh`. If it worked, `hello.md` exists, the card is
+   `done`, and the last line of `events.jsonl` is `completed`.
+4. Nothing happened? Check `$WORKSPACE_ROOT/.task-router/state/launchd-runner.log`,
+   then "Events and debugging" below.
 
 ---
 
@@ -159,6 +185,9 @@ Add a card to `task-board.md`:
 - **Status**: ready
 - **Measure**: 3-bullet summary at the top of notes/2026-04-21-meeting.md
 ```
+
+Only cards whose `Who` includes Claude and whose `Status` is `ready` are run
+automatically; cards for humans are skipped.
 
 Save. The watcher picks it up. Once the file has been idle for 30
 seconds, the runner kicks off. Claude reads the board, finds your

@@ -8,6 +8,10 @@
 
 set -euo pipefail
 
+# Pick up WORKSPACE_ROOT / LABEL_PREFIX saved by install.sh, so this works in any terminal.
+_ENV_FILE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/.rendered/env.sh"
+[ -f "$_ENV_FILE" ] && . "$_ENV_FILE"
+
 LABEL_PREFIX="${LABEL_PREFIX:-io.github.local.md-task-router}"
 LA_DIR="$HOME/Library/LaunchAgents"
 

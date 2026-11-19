@@ -74,7 +74,9 @@
 
 ## To do
 
-<!-- New task cards go here -->
+<!-- New task cards go here. The example cards below are deliberately not
+     `ready`, so nothing runs until you add your own card. Change a card to
+     `ready` (with Who: Claude) when you want it executed. -->
 
 ## [TASK-001] Summarise yesterday's meeting notes
 
@@ -83,7 +85,7 @@
 - **Est**: —
 - **Type**: simple
 - **Priority**: P1 · #notes · @output
-- **Status**: ready
+- **Status**: blocked:human:add-the-meeting-notes-file
 - **Measure**: 3-bullet summary at the top of `notes/2026-04-20-meeting.md`, with action items extracted as a numbered list.
 
 ## [TASK-002] Draft blog post outline: "why I use Markdown as a control plane"
