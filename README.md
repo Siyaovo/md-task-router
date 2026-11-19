@@ -1,5 +1,7 @@
 # Markdown Task Router
 
+English · [中文](README.zh-CN.md)
+
 A minimal, session-independent runtime that turns a single Markdown file
 into an agent control plane.
 
@@ -84,7 +86,7 @@ Claude Code running the task-check skill
 
 ```bash
 # 1. Clone this repo.
-git clone https://github.com/{you}/md-task-router.git ~/code/md-task-router
+git clone https://github.com/Siyaovo/md-task-router.git ~/code/md-task-router
 cd ~/code/md-task-router
 
 # 2. Install fswatch.
@@ -210,7 +212,7 @@ notification:
 ```
 
 This case is worth separating because retrying cannot fix it — a human has
-to run `claude auth login`. Folded into `failed`, an expired login looks
+to renew the login (`claude setup-token`, see install step 6). Folded into `failed`, an expired login looks
 exactly like a transient error, and a scheduled runner will keep firing
 hourly against it indefinitely. In my own deployment it did so for six
 weeks before I noticed.
@@ -286,7 +288,7 @@ Only three pieces are macOS-specific. Each has a direct Linux equivalent:
 
 A Linux port is a ~2 hour task: replace the plist templates with
 `systemd` unit files, swap the watcher's `fswatch` invocation for
-`inotifywait -m -e modify,create,move`, and update the two `stat`
+`inotifywait -m -e modify,create,move`, and update the `stat`
 calls in `run-task-check.sh` and `status.sh` to use `-c %Y`.
 Everything else — the state machine, the skill, the quiescence
 gate, the dead-letter queue — is unchanged.
