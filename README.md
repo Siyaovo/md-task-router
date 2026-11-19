@@ -77,7 +77,9 @@ Claude Code running the task-check skill
 
 - **macOS** with Homebrew (Linux instructions below)
 - **`fswatch`** — `brew install fswatch`
-- **[Claude Code CLI](https://docs.claude.com/en/docs/claude-code)**, already logged in once with `claude` (Claude Pro or Max)
+- **Claude Code or Codex**, either one:
+  - [Claude Code](https://docs.claude.com/en/docs/claude-code), logged in once with `claude` (Claude Pro or Max)
+  - Codex: `npm install -g @openai/codex` (or `brew install codex`), then `codex login`
 - A workspace folder for `task-board.md` and whatever Claude produces (ideally a git repo, so runs can be undone)
 
 ---
@@ -121,7 +123,14 @@ bash bin/install.sh
 The token lives only in your Keychain. `run-task-check.sh` reads it on every
 run; you never put it in a file or an environment variable.
 
-`install.sh` finds where `claude` and `fswatch` live and remembers
+**Using Codex instead of Claude Code:** skip steps 5 and 6 and run
+`export AGENT_CLI=codex` before `bash bin/install.sh`. The runner feeds
+`skill/SKILL.md` straight to `codex exec`, and Codex uses the account from
+`codex login`. If `AGENT_CLI` is unset, install.sh picks Claude Code when it is
+installed, otherwise Codex. Cards still say `Who: Claude`; it just means "the
+agent".
+
+`install.sh` finds where the agent CLI and `fswatch` live and remembers
 `WORKSPACE_ROOT`, so the `bin/` commands work from any new terminal without
 exporting it again.
 
@@ -272,8 +281,10 @@ turn it off.
 
 ### Permissions
 
-The runner starts Claude Code with `--permission-mode bypassPermissions`, so
-unattended runs can use any tool without asking. Point `WORKSPACE_ROOT` at a
+The runner starts the agent with full permissions (Claude Code:
+`--permission-mode bypassPermissions`; Codex:
+`--dangerously-bypass-approvals-and-sandbox`), so unattended runs can use any
+tool without asking. Point `WORKSPACE_ROOT` at a
 folder you are comfortable letting an agent edit, keep it under git so the
 snapshots above can undo a bad run, and use `bin/auto-off.sh` while you are
 working in the folder yourself.

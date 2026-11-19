@@ -27,6 +27,10 @@
     <dict>
         <key>PATH</key>
         <string>__HOME__/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+        <key>LANG</key>
+        <string>en_US.UTF-8</string>
+        <key>LC_ALL</key>
+        <string>en_US.UTF-8</string>
         <key>HOME</key>
         <string>__HOME__</string>
         <key>WORKSPACE_ROOT</key>

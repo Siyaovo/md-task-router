@@ -10,7 +10,9 @@
 
 所有状态都是放在 git 目录里的纯文本。没有数据库，不绑定任何平台。
 
-**一句话说它能干什么：** 你在一个 Markdown 文件里写任务卡，把 `Who` 写成 Claude、`Status` 写成 `ready`，保存。后台的 Claude 会自己接手，做完把结果写回卡片，再把卡改成 `done`。你不用开终端，也不用守着。
+**一句话说它能干什么：** 你在一个 Markdown 文件里写任务卡，把 `Who` 写成 Claude、`Status` 写成 `ready`，保存。后台的 AI（Codex 或 Claude Code 都行）会自己接手，做完把结果写回卡片，再把卡改成 `done`。你不用开终端，也不用守着。
+
+> 卡片里的 `Who: Claude` 只是「交给 AI」的标记，用 Codex 也照这样写。
 
 ---
 
@@ -62,12 +64,16 @@ Claude Code 执行 task-check skill
 
 - **macOS**，装好 Homebrew（Linux 见下文）
 - **`fswatch`**：`brew install fswatch`
-- **[Claude Code 命令行](https://docs.claude.com/en/docs/claude-code)**，已经在终端里用 `claude` 登录过（需要 Claude Pro 或 Max 订阅）
-- 一个文件夹，用来放 `task-board.md` 和 Claude 产出的文件（最好是 git 仓库，方便撤销）
+- **Claude Code 或 Codex，用哪个都可以：**
+  - **[Claude Code](https://docs.claude.com/en/docs/claude-code)**：在终端里用 `claude` 登录过（需要 Claude Pro 或 Max 订阅）
+  - **Codex**：`npm install -g @openai/codex`（或 `brew install codex`），然后运行一次 `codex login` 登录
+- 一个文件夹，用来放 `task-board.md` 和 AI 产出的文件（最好是 git 仓库，方便撤销）
 
 ---
 
 ## 安装
+
+前三步两种 AI 都一样：
 
 ```bash
 # 1. 克隆仓库
@@ -77,33 +83,48 @@ cd ~/code/md-task-router
 # 2. 安装 fswatch
 brew install fswatch
 
-# 3. 让 WORKSPACE_ROOT 指向放 task-board.md 的文件夹
+# 3. 准备工作文件夹和看板
 export WORKSPACE_ROOT=~/notes
 mkdir -p "$WORKSPACE_ROOT"
-#    还没有看板的话，复制示例看板过去（已经有了就跳过这一行）
-cp sample/task-board.md "$WORKSPACE_ROOT/"
+cp sample/task-board.md "$WORKSPACE_ROOT/"     # 已经有看板就跳过
+```
 
-# 4.（可选）给 launchd 任务起自己的标签前缀
-#    默认是 io.github.local.md-task-router
-export LABEL_PREFIX=io.github.yourusername.md-task-router
+第四步按你用的 AI 二选一。
 
-# 5. 把 task-check skill 装进 Claude Code
+### 4A. 用 Claude Code
+
+```bash
+# 把 task-check skill 装进 Claude Code
 mkdir -p ~/.claude/skills/task-check
 cp skill/SKILL.md ~/.claude/skills/task-check/SKILL.md
 
-# 6. 给后台运行配一个长期登录（只做一次）
-#    普通的 claude 登录会过期，后台没法自己刷新，几周后就会开始失败
+# 给后台运行配一个长期登录（只做一次）
+# 普通的 claude 登录会过期，后台没法自己刷新，几周后就会开始失败
 claude setup-token          # 在浏览器里确认，终端会打印一个令牌
 security add-generic-password -U -a "$USER" -s claude-headless-token -w
 #                           # 在提示处粘贴令牌（不会显示出来）
 
-# 7. 生成并加载 launchd 任务
+# 安装后台任务
+export AGENT_CLI=claude
 bash bin/install.sh
 ```
 
 令牌只存在你的钥匙串里。`run-task-check.sh` 每次运行时去钥匙串里读，不用写进任何文件或环境变量。
 
-`install.sh` 会自动找到 `claude` 和 `fswatch` 装在哪里，并把 `WORKSPACE_ROOT` 记下来。之后打开新的终端，直接在仓库目录里运行 `bin/` 下的命令就行，不用再 export 一遍。
+### 4B. 用 Codex
+
+```bash
+export AGENT_CLI=codex
+bash bin/install.sh
+```
+
+用 Codex 不需要复制 skill，也不需要配令牌：运行器直接把仓库里的 `skill/SKILL.md` 交给 `codex exec`，登录用的是你 `codex login` 时的账号。
+
+### 安装之后
+
+不设 `AGENT_CLI` 的话，`install.sh` 会自己选：装了 Claude Code 就用它，否则用 Codex。想给 launchd 任务起自己的标签名，安装前设置 `LABEL_PREFIX`（默认 `io.github.local.md-task-router`）。
+
+`install.sh` 会自动找到你选的 AI（`claude` 或 `codex`）和 `fswatch` 装在哪里，并把 `WORKSPACE_ROOT` 和选用的 AI 记下来。之后打开新的终端，直接在仓库目录里运行 `bin/` 下的命令就行，不用再 export 一遍。
 
 如果这个文件夹是 git 仓库，建议在它的 `.gitignore` 里加一行 `.task-router/`，运行日志就不会混进你自己的提交。
 
@@ -121,7 +142,7 @@ bash bin/install.sh
    - **Measure**: 在 hello.md 里写一句「任务路由跑通了」
    ```
 
-2. 保存，然后等大约一分钟（要先等 30 秒没人改动，再加上 Claude 干活的时间）。
+2. 保存，然后等一两分钟（要先等 30 秒没人改动，再加上 AI 干活的时间）。
 3. 在仓库目录里运行 `bash bin/status.sh`。跑通的话，`hello.md` 已经生成，这张卡变成了 `done`，`events.jsonl` 最后一行是 `completed`。
 4. 没反应的话，先看 `$WORKSPACE_ROOT/.task-router/state/launchd-runner.log`，再看下文「事件与排查」。
 
@@ -209,7 +230,9 @@ tail -f "$WORKSPACE_ROOT/.task-router/state/events.jsonl"
 
 ### 登录过期
 
-后台运行用的是安装第 6 步存进钥匙串的长期令牌（钥匙串服务名 `claude-headless-token`，可以用 `TOKEN_KEYCHAIN_SERVICE` 改）。如果环境里已经设置了 `CLAUDE_CODE_OAUTH_TOKEN`，就优先用它。
+**用 Claude Code：** 后台运行用的是安装 4A 存进钥匙串的长期令牌（钥匙串服务名 `claude-headless-token`，可以用 `TOKEN_KEYCHAIN_SERVICE` 改）。如果环境里已经设置了 `CLAUDE_CODE_OAUTH_TOKEN`，就优先用它。
+
+**用 Codex：** 后台用的是你 `codex login` 时的登录。失败时会记 `auth_failed` 并提示你重新运行 `codex login`。
 
 因为登录过期而失败的运行，会记成 `auth_failed`，不会混在普通的 `failed` 里，并且弹一条桌面通知：
 
@@ -240,7 +263,7 @@ git -C "$WORKSPACE_ROOT" checkout <提交号> -- task-board.md   # 把一个文�
 
 ### 权限
 
-运行器启动 Claude Code 时用的是 `--permission-mode bypassPermissions`，也就是无人值守时它可以直接用任何工具，不会停下来问你。所以：
+运行器启动 AI 时是全权限模式：Codex 用 `--dangerously-bypass-approvals-and-sandbox`，Claude Code 用 `--permission-mode bypassPermissions`。也就是无人值守时它可以直接用任何工具、不会停下来问你。所以：
 
 - `WORKSPACE_ROOT` 只指向你放心让 Agent 修改的文件夹；
 - 把这个文件夹放在 git 下，出问题可以用上面的快照退回；

@@ -25,11 +25,25 @@ fi
 
 LABEL_PREFIX="${LABEL_PREFIX:-io.github.local.md-task-router}"
 
-# Background jobs run with a minimal PATH, so find claude and fswatch now.
-CLAUDE_BIN="$(command -v claude || true)"
+# Which agent runs the tasks: AGENT_CLI=claude or AGENT_CLI=codex.
+# If unset, use Claude Code when installed, otherwise Codex.
+if [ -z "${AGENT_CLI:-}" ]; then
+  if command -v claude >/dev/null 2>&1; then AGENT_CLI=claude
+  elif command -v codex >/dev/null 2>&1; then AGENT_CLI=codex
+  else
+    echo "✗ Neither claude nor codex found on PATH."
+    echo "  Install Claude Code (https://docs.claude.com/en/docs/claude-code)"
+    echo "  or Codex (npm install -g @openai/codex) first."
+    exit 1
+  fi
+fi
+case "$AGENT_CLI" in claude|codex) ;; *) echo "✗ AGENT_CLI must be claude or codex"; exit 1 ;; esac
+
+# Background jobs run with a minimal PATH, so find the agent and fswatch now.
+CLAUDE_BIN="$(command -v "$AGENT_CLI" || true)"
 FSWATCH_BIN="$(command -v fswatch || true)"
 if [ -z "$CLAUDE_BIN" ]; then
-  echo "✗ claude not found on PATH. Install Claude Code first: https://docs.claude.com/en/docs/claude-code"
+  echo "✗ $AGENT_CLI not found on PATH. Install it first, or set AGENT_CLI to the other one."
   exit 1
 fi
 if [ -z "$FSWATCH_BIN" ]; then
@@ -37,6 +51,9 @@ if [ -z "$FSWATCH_BIN" ]; then
   exit 1
 fi
 EXTRA_PATH="$(dirname "$CLAUDE_BIN"):$(dirname "$FSWATCH_BIN")"
+# npm-installed CLIs are node scripts, so node must be on the background PATH too.
+NODE_BIN="$(command -v node || true)"
+[ -n "$NODE_BIN" ] && EXTRA_PATH="$EXTRA_PATH:$(dirname "$NODE_BIN")"
 
 # Log directory must exist before launchd tries to write into it.
 mkdir -p "$WORKSPACE_ROOT/.task-router/state"
@@ -63,7 +80,7 @@ echo ""
 echo "  WORKSPACE_ROOT = $WORKSPACE_ROOT"
 echo "  REPO_ROOT      = $REPO_ROOT"
 echo "  LABEL_PREFIX   = $LABEL_PREFIX"
-echo "  claude         = $CLAUDE_BIN"
+echo "  agent          = $AGENT_CLI ($CLAUDE_BIN)"
 echo "  fswatch        = $FSWATCH_BIN"
 echo ""
 
@@ -87,7 +104,8 @@ done
 cat > "$RENDERED_DIR/env.sh" <<ENVEOF
 : "\${WORKSPACE_ROOT:=$WORKSPACE_ROOT}"
 : "\${LABEL_PREFIX:=$LABEL_PREFIX}"
-export WORKSPACE_ROOT LABEL_PREFIX
+: "\${AGENT_CLI:=$AGENT_CLI}"
+export WORKSPACE_ROOT LABEL_PREFIX AGENT_CLI
 ENVEOF
 echo "  ✓ settings saved to .rendered/env.sh"
 

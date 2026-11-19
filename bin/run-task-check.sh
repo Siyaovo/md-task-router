@@ -34,6 +34,13 @@ AUTH_MARKER="$STATE_DIR/auth_failed.marker"
 AUTH_BACKOFF_SECS="${AUTH_BACKOFF_SECS:-21600}"
 TOKEN_KEYCHAIN_SERVICE="${TOKEN_KEYCHAIN_SERVICE:-claude-headless-token}"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+# Which agent CLI runs the task-check: "claude" (Claude Code) or "codex".
+AGENT_CLI="${AGENT_CLI:-claude}"
+# launchd starts jobs without a locale; without UTF-8, tools the agent runs
+# (python, sed, ...) choke on non-ASCII task boards such as Chinese text.
+export LANG="${LANG:-en_US.UTF-8}"
+export LC_ALL="${LC_ALL:-en_US.UTF-8}"
 
 mkdir -p "$STATE_DIR"
 
@@ -52,7 +59,7 @@ log_event() {
 # --- Auth: long-lived token from the Keychain, plus backoff after failure ---
 # Headless runs cannot refresh a normal interactive login. Generate a long-lived
 # token once with `claude setup-token` and store it in the Keychain (see README).
-if [ -z "${CLAUDE_CODE_OAUTH_TOKEN:-}" ] && command -v security >/dev/null 2>&1; then
+if [ "$AGENT_CLI" = "claude" ] && [ -z "${CLAUDE_CODE_OAUTH_TOKEN:-}" ] && command -v security >/dev/null 2>&1; then
   TOK=$(security find-generic-password -s "$TOKEN_KEYCHAIN_SERVICE" -w 2>/dev/null || true)
   if [ -n "$TOK" ]; then export CLAUDE_CODE_OAUTH_TOKEN="$TOK"; fi
 fi
@@ -127,10 +134,28 @@ bash "$SCRIPT_DIR/snapshot.sh" "task-router: before run ($TRIGGER_SOURCE)" || tr
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] === run-task-check start (trigger=$TRIGGER_SOURCE) ===" >> "$RUN_LOG"
 RUN_LOG_OFFSET=$(wc -l < "$RUN_LOG")
 
-claude \
-  --permission-mode bypassPermissions \
-  --no-session-persistence \
-  -p "/task-check" >> "$RUN_LOG" 2>&1 &
+if [ "$AGENT_CLI" = "codex" ]; then
+  # Codex: feed the task-check skill body (frontmatter stripped) as the prompt.
+  PROMPT_FILE="$STATE_DIR/codex-prompt.md"
+  {
+    echo "You are running unattended as the task-board executor for this workspace."
+    echo "WORKSPACE_ROOT=$WORKSPACE_ROOT (this is your working directory)."
+    echo "Follow the instructions below exactly. If you cannot start parallel sub-agents, run the ready tasks one at a time."
+    echo
+    awk 'NR==1 && /^---$/ {fm=1; next} fm && /^---$/ {fm=0; next} !fm' "$REPO_ROOT/skill/SKILL.md"
+  } > "$PROMPT_FILE"
+  codex exec \
+    --dangerously-bypass-approvals-and-sandbox \
+    --skip-git-repo-check \
+    --ephemeral \
+    -C "$WORKSPACE_ROOT" \
+    - < "$PROMPT_FILE" >> "$RUN_LOG" 2>&1 &
+else
+  claude \
+    --permission-mode bypassPermissions \
+    --no-session-persistence \
+    -p "/task-check" >> "$RUN_LOG" 2>&1 &
+fi
 CLAUDE_PID=$!
 
 # Kill-timer: if the process outlives TIMEOUT_SECS, kill it.
@@ -163,14 +188,18 @@ elif [ "$EXIT_CODE" -eq 137 ] || [ "$EXIT_CODE" -eq 143 ]; then
   # 137 = SIGKILL, 143 = SIGTERM — both indicate our timeout killed it.
   log_event "timeout" "\"timeout_secs\":$TIMEOUT_SECS"
 elif tail -n +"$((RUN_LOG_OFFSET + 1))" "$RUN_LOG" \
-     | grep -q -E "Failed to authenticate|401 Invalid authentication|OAuth session expired"; then
+     | grep -q -E "Failed to authenticate|401 Invalid authentication|OAuth session expired|401 Unauthorized|Not logged in|codex login"; then
   # Expired credentials. Retrying is useless — a human has to re-authenticate.
   # Emit a distinct event and a desktop notification, so this does not fail
   # silently for weeks behind a generic `failed`.
   log_event "auth_failed" "\"exit_code\":$EXIT_CODE"
   # Notify once per failure streak, then back off (see the auth section above).
   if [ ! -f "$AUTH_MARKER" ]; then
-    MSG="Claude CLI auth failed — run: claude setup-token, then store the token in the Keychain (see README)"
+    if [ "$AGENT_CLI" = "codex" ]; then
+      MSG="Codex auth failed — run: codex login"
+    else
+      MSG="Claude CLI auth failed — run: claude setup-token, then store the token in the Keychain (see README)"
+    fi
     if command -v osascript >/dev/null 2>&1; then
       osascript -e "display notification \"$MSG\" with title \"Task Router stalled\"" 2>/dev/null || true
     elif command -v notify-send >/dev/null 2>&1; then
