@@ -165,6 +165,28 @@ For each failed task:
 
 ---
 
+## Step 7 · Keep the board short
+
+A board that grows without limit becomes expensive to read on every run and
+hard for a human to scan. After writing the report:
+
+- **Cards stay short.** A card holds only: what, who, when, `Est` (human time
+  needed), priority, status, measure, links, and at most 3 lines of `Notes`.
+  Long analysis, drafts and process logs go into separate files; the card
+  links to them.
+- **Move finished cards.** `done` and `cancelled:*` cards move from "To do" to
+  the "Done" section in the same week.
+- **Archive in bulk.** When "Done" holds more than 20 cards, cut the whole
+  section into `archive/task-board-archive-YYYY-MM-DD.md` and leave a one-line
+  link in its place.
+- **Never reuse IDs.** New cards continue from the highest existing number,
+  including archived ones.
+- **Judge state by evidence.** When deciding whether a `running:*` task is
+  really alive, check `events.jsonl` and the deliverable's modification time,
+  not just the `Status` line.
+
+---
+
 ## Safety rules
 
 Before executing any of the following, **always notify the user first and wait for explicit confirmation**:

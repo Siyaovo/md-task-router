@@ -8,6 +8,11 @@
 # - mkdir-based atomic lock prevents concurrent execution.
 # - bash-native timeout (macOS has no `timeout` command by default).
 # - All events written to events.jsonl for observability.
+# - Auth: prefers a long-lived token (`claude setup-token`) stored in the macOS
+#   Keychain, so headless runs survive OAuth session expiry. After an auth
+#   failure, runs back off for 6 hours instead of failing every hour.
+# - Snapshots: if WORKSPACE_ROOT is a git repo, commits a snapshot before and
+#   after each run, so anything the agent changed can be inspected or reverted.
 #
 
 set -euo pipefail
@@ -21,6 +26,10 @@ RUN_LOG="$STATE_DIR/run-$(date +%Y%m%d).log"
 TIMEOUT_SECS="${TASK_CHECK_TIMEOUT:-1800}"
 
 TRIGGER_SOURCE="${1:-manual}"
+AUTH_MARKER="$STATE_DIR/auth_failed.marker"
+AUTH_BACKOFF_SECS="${AUTH_BACKOFF_SECS:-21600}"
+TOKEN_KEYCHAIN_SERVICE="${TOKEN_KEYCHAIN_SERVICE:-claude-headless-token}"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 mkdir -p "$STATE_DIR"
 
@@ -35,6 +44,23 @@ log_event() {
     echo "{\"ts\":\"$ts\",\"event\":\"$event\",\"trigger\":\"$TRIGGER_SOURCE\"}" >> "$EVENTS_LOG"
   fi
 }
+
+# --- Auth: long-lived token from the Keychain, plus backoff after failure ---
+# Headless runs cannot refresh a normal interactive login. Generate a long-lived
+# token once with `claude setup-token` and store it in the Keychain (see README).
+if [ -z "${CLAUDE_CODE_OAUTH_TOKEN:-}" ] && command -v security >/dev/null 2>&1; then
+  TOK=$(security find-generic-password -s "$TOKEN_KEYCHAIN_SERVICE" -w 2>/dev/null || true)
+  if [ -n "$TOK" ]; then export CLAUDE_CODE_OAUTH_TOKEN="$TOK"; fi
+fi
+# After an auth failure, skip runs for AUTH_BACKOFF_SECS (default 6h) instead of
+# failing every hour. Delete the marker after fixing the token to resume at once.
+if [ -f "$AUTH_MARKER" ]; then
+  AGE=$(($(date +%s) - $(stat -f %m "$AUTH_MARKER" 2>/dev/null || echo 0)))
+  if [ "$AGE" -lt "$AUTH_BACKOFF_SECS" ]; then
+    log_event "skipped_auth_backoff" "\"marker_age_secs\":$AGE"
+    exit 0
+  fi
+fi
 
 # --- Atomic lock: prevent concurrent execution ---
 if ! mkdir "$LOCK_DIR" 2>/dev/null; then
@@ -89,6 +115,9 @@ log_event "started"
 
 cd "$WORKSPACE_ROOT"
 
+# Snapshot before the run (no-op unless WORKSPACE_ROOT is a git repo).
+bash "$SCRIPT_DIR/snapshot.sh" "task-router: before run ($TRIGGER_SOURCE)" || true
+
 # --- Invoke Claude Code running the /task-check skill ---
 # bash-native timeout: background the process + kill-timer.
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] === run-task-check start (trigger=$TRIGGER_SOURCE) ===" >> "$RUN_LOG"
@@ -119,23 +148,32 @@ wait "$TIMER_PID" 2>/dev/null || true
 
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] === run-task-check end (exit=$EXIT_CODE) ===" >> "$RUN_LOG"
 
+# Snapshot after the run: one commit shows exactly what this run changed.
+bash "$SCRIPT_DIR/snapshot.sh" "task-router: after run (exit=$EXIT_CODE)" || true
+
 # Classify the result by exit code.
 if [ "$EXIT_CODE" -eq 0 ]; then
+  rm -f "$AUTH_MARKER"
   log_event "completed" "\"exit_code\":0"
 elif [ "$EXIT_CODE" -eq 137 ] || [ "$EXIT_CODE" -eq 143 ]; then
   # 137 = SIGKILL, 143 = SIGTERM — both indicate our timeout killed it.
   log_event "timeout" "\"timeout_secs\":$TIMEOUT_SECS"
 elif tail -n +"$((RUN_LOG_OFFSET + 1))" "$RUN_LOG" \
-     | grep -q -E "Failed to authenticate|401 Invalid authentication"; then
+     | grep -q -E "Failed to authenticate|401 Invalid authentication|OAuth session expired"; then
   # Expired credentials. Retrying is useless — a human has to re-authenticate.
   # Emit a distinct event and a desktop notification, so this does not fail
   # silently for weeks behind a generic `failed`.
   log_event "auth_failed" "\"exit_code\":$EXIT_CODE"
-  if command -v osascript >/dev/null 2>&1; then
-    osascript -e 'display notification "Claude CLI credentials expired — run: claude auth login" with title "Task Router stalled"' 2>/dev/null || true
-  elif command -v notify-send >/dev/null 2>&1; then
-    notify-send "Task Router stalled" "Claude CLI credentials expired — run: claude auth login" 2>/dev/null || true
+  # Notify once per failure streak, then back off (see the auth section above).
+  if [ ! -f "$AUTH_MARKER" ]; then
+    MSG="Claude CLI auth failed — run: claude setup-token, then store the token in the Keychain (see README)"
+    if command -v osascript >/dev/null 2>&1; then
+      osascript -e "display notification \"$MSG\" with title \"Task Router stalled\"" 2>/dev/null || true
+    elif command -v notify-send >/dev/null 2>&1; then
+      notify-send "Task Router stalled" "$MSG" 2>/dev/null || true
+    fi
   fi
+  touch "$AUTH_MARKER"
 else
   log_event "failed" "\"exit_code\":$EXIT_CODE"
 fi

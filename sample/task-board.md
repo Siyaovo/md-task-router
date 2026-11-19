@@ -16,11 +16,13 @@
 
 - **Who**: Claude | Me | {other human}
 - **When**: {deadline or ASAP}
+- **Est**: {time a human needs to spend, e.g. 30m; "—" for Claude-only tasks}
 - **Type**: simple
 - **Priority**: P0 | P1 | P2 | P3 · #{domain} · @{kind}
 - **Status**: {status code, see grammar below}
 - **Measure**: {how do we know this is done?}
-- **Notes**: {optional}
+- **Links**: {files with the details; keep long content out of the card}
+- **Notes**: {optional, at most 3 dated lines}
 ```
 
 **Complex** (decomposed after Claude picks it up):
@@ -30,6 +32,7 @@
 
 - **Who**: Claude
 - **When**: {deadline}
+- **Est**: {human time needed}
 - **Type**: complex
 - **Priority**: P0 | P1 | P2 | P3 · #{domain} · @{kind}
 - **Status**: {status code}
@@ -60,6 +63,13 @@
 - `running:*` tasks older than 30 minutes are auto-reset to `ready` (deadlock recovery).
 - On start, tasks transition `ready` → `running:*`; on success, `running:*` → `done`.
 
+**Housekeeping rules**:
+- Cards stay short: at most 3 lines of `Notes`; long material goes in linked files.
+- `done` / `cancelled` cards move to the Done section the same week.
+- When Done holds more than 20 cards, the section is cut into
+  `archive/task-board-archive-YYYY-MM-DD.md`.
+- New cards continue from the highest ID ever used; IDs are never reused.
+
 ---
 
 ## To do
@@ -70,6 +80,7 @@
 
 - **Who**: Claude
 - **When**: today
+- **Est**: —
 - **Type**: simple
 - **Priority**: P1 · #notes · @output
 - **Status**: ready
@@ -81,6 +92,7 @@
 - **When**: this week
 - **Type**: simple
 - **Priority**: P2 · #writing · @output
+- **Est**: 15m (pick one of three angles)
 - **Status**: blocked:human:pick-thesis-angle
 - **Measure**: a 7-section outline in `drafts/markdown-control-plane.md`, each section with a one-sentence promise.
 

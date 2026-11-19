@@ -103,9 +103,19 @@ export LABEL_PREFIX=io.github.yourusername.md-task-router
 mkdir -p ~/.claude/skills/task-check
 cp skill/SKILL.md ~/.claude/skills/task-check/SKILL.md
 
-# 6. Render and load the launchd agents.
+# 6. Give headless runs a long-lived login (one time).
+#    A normal `claude` login expires and cannot be refreshed without you,
+#    so background runs would start failing after a few weeks.
+claude setup-token          # confirm in the browser; it prints a token
+security add-generic-password -U -a "$USER" -s claude-headless-token -w
+#                           # paste the token at the prompt (not echoed)
+
+# 7. Render and load the launchd agents.
 bash bin/install.sh
 ```
+
+The token lives only in your Keychain. `run-task-check.sh` reads it on every
+run; you never put it in a file or an environment variable.
 
 That's it. Edit `$WORKSPACE_ROOT/task-board.md`, save, and within a few
 seconds `events.jsonl` should show a `file_changed_triggered` event.
@@ -186,6 +196,11 @@ processes.
 
 ### Expired credentials
 
+Headless runs authenticate with the long-lived token from install step 6
+(Keychain service `claude-headless-token`, override with
+`TOKEN_KEYCHAIN_SERVICE`). If `CLAUDE_CODE_OAUTH_TOKEN` is already set in the
+environment, that wins.
+
 A run whose `claude` invocation dies on expired credentials is logged as
 `auth_failed` rather than the generic `failed`, and raises a desktop
 notification:
@@ -199,6 +214,47 @@ to run `claude auth login`. Folded into `failed`, an expired login looks
 exactly like a transient error, and a scheduled runner will keep firing
 hourly against it indefinitely. In my own deployment it did so for six
 weeks before I noticed.
+
+After an auth failure the runner backs off: it notifies once, then skips runs
+for 6 hours (`AUTH_BACKOFF_SECS`) and logs `skipped_auth_backoff` instead of
+failing every hour. Once you have fixed the token, resume immediately with:
+
+```bash
+rm -f "$WORKSPACE_ROOT/.task-router/state/auth_failed.marker"
+bash bin/run-task-check.sh manual
+```
+
+### Snapshots and undo
+
+If `WORKSPACE_ROOT` is a git repository, the runner commits a local snapshot
+right before and right after every run (`bin/snapshot.sh`; nothing is pushed).
+Each automated run therefore shows up as its own commit:
+
+```bash
+git -C "$WORKSPACE_ROOT" log --oneline | head          # recent runs
+git -C "$WORKSPACE_ROOT" show --stat <commit>          # what one run changed
+git -C "$WORKSPACE_ROOT" checkout <commit> -- task-board.md   # undo one file
+```
+
+Not a git repo? Run `git init` in it once to get this. Set `SNAPSHOTS=0` to
+turn it off.
+
+### Permissions
+
+The runner starts Claude Code with `--permission-mode bypassPermissions`, so
+unattended runs can use any tool without asking. Point `WORKSPACE_ROOT` at a
+folder you are comfortable letting an agent edit, keep it under git so the
+snapshots above can undo a bad run, and use `bin/auto-off.sh` while you are
+working in the folder yourself.
+
+### Keeping the board short
+
+The `task-check` skill also tidies the board after each run: cards keep at
+most 3 lines of notes (long material goes into linked files), finished cards
+move to the Done section, and when Done exceeds 20 cards it is archived to
+`archive/task-board-archive-YYYY-MM-DD.md`. Task IDs are never reused. See
+`sample/task-board.md` for the card format, including the `Est` field for the
+time a human needs to spend.
 
 ---
 
